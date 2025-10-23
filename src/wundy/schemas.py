@@ -24,11 +24,11 @@ def validate_material_parameters(material: dict[str, dict[str, Any]]) -> bool:
 
 def validate_element_properties(block: dict[str, dict[str, Any]]) -> bool:
     t1d1 = Schema({Optional("area", default=1.0): And(float, lambda a: a > 0)})
-    if block["element type"].lower() == "t1d1":
-        v = t1d1.validate(block["properties"])
-        block["properties"].update(v)
+    if block["element_type"].lower() == "t1d1":
+        v = t1d1.validate(block["element_properties"])
+        block["element_properties"].update(v)
     else:
-        raise ValueError(f"Unknown element type {block['element type']!r}")
+        raise ValueError(f"Unknown element type {block['element_type']!r}")
     return True
 
 
@@ -146,8 +146,8 @@ block_schema = Schema(
                 And(str, Use(lambda s: s.lower())),
                 And(list, lambda outer: all(isinstance(_, int) for _ in outer)),
             ),
-            "element type": And(str, lambda s: s.lower() in ("t1d1",), Use(lambda n: n.lower())),
-            Optional("properties", default=dict()): dict,
+            "element_type": And(str, lambda s: s.lower() in ("t1d1",), Use(lambda n: n.lower())),
+            Optional("element_properties", default=dict()): dict,
         },
         lambda d: validate_element_properties(d),
     )

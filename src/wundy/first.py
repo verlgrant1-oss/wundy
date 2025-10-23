@@ -12,7 +12,7 @@ def first_fe_code(
     dload: NDArray[float],
     materials: dict[str, Any],
     blocks: dict[str, Any],
-):
+) -> dict[str, Any]:
     num_node, dof_per_node = coords.shape
     num_elem, node_per_elem = connect.shape
 
@@ -30,9 +30,9 @@ def first_fe_code(
 
     # Assemble global stiffness
     for block in blocks.values():
+        A = block["element_properties"]["area"]
         material = materials[block["material"]]
-        A = block["area"]
-        E = material["e"]
+        E = material["parameters"]["E"]
         for element in block["elements"]:
             nodes = connect[element]
 
@@ -58,7 +58,7 @@ def first_fe_code(
                 # Dirichlet
                 # Apply boundary conditions such that the matrix remains symmetric
                 I = n * dof_per_node + j
-                Fbc -= [K[k, I] * dofvals[n, j] for k in range(node_per_elem * dof_per_node)]
+                Fbc -= [K[k, I] * dofvals[n, j] for k in range(num_node * dof_per_node)]
                 Kbc[I, :] = Kbc[:, I] = 0
                 Kbc[I, I] = 1
 
@@ -71,3 +71,7 @@ def first_fe_code(
 
     # solve the system
     u = np.linalg.solve(Kbc, Fbc)
+
+    solution = {"displ": u, "stiff": K, "force": F}
+
+    return solution

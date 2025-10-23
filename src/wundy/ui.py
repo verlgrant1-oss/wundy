@@ -35,7 +35,7 @@ def preprocess(data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
     # Put node sets in dictionary for easier look up
     nodesets = preprocessed.setdefault("nodesets", {})
     nodesets["all"] = list(range(num_node))
-    for ns in inp["nset"]:
+    for ns in inp.get("nset", []):
         if ns["name"] in nodesets:
             errors += 1
             logger.error(f"Duplicate node set {ns['name']}")
@@ -78,9 +78,9 @@ def preprocess(data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
             )
             continue
         block = blocks.setdefault(eb["name"], {})
-        block["properties"] = eb["properties"]
+        block["element_properties"] = eb["element_properties"]
         block["material"] = eb["material"]
-        block["element type"] = eb["element type"]
+        block["element_type"] = eb["element_type"]
         if isinstance(eb["elements"], str):
             # elements given as set name
             if eb["elements"] not in elsets:

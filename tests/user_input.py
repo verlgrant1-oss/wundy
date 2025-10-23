@@ -32,7 +32,7 @@ wundy:
   - material: mat-1
     name: block-1
     elements: all
-    element type: t1d1
+    element_type: t1d1
 """)
     file.seek(0)
     data = wundy.ui.load(file)
@@ -74,11 +74,11 @@ wundy:
     assert len(blocks) == 1
 
     block = blocks[0]
-    assert block["element type"] == "t1d1"
+    assert block["element_type"] == "t1d1"
     assert block["name"] == "block-1"
     assert block["material"] == "mat-1"
     assert block["elements"] == "all"
-    assert block["properties"] == {"area": 1.0}
+    assert block["element_properties"] == {"area": 1.0}
 
     # preprocess will create doftags/dofvals/matprops
     d = wundy.ui.preprocess(data)
@@ -91,8 +91,8 @@ wundy:
         "block-1": {
             "material": "mat-1",
             "elements": [0, 1],
-            "element type": "t1d1",
-            "properties": {"area": 1.0},
+            "element_type": "t1d1",
+            "element_properties": {"area": 1.0},
         }
     }
     assert np.allclose(d["dload"], np.zeros((2, 1)))
