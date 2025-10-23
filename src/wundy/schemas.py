@@ -7,6 +7,9 @@ from schema import Or
 from schema import Schema
 from schema import Use
 
+NEUMANN = 0
+DIRICHLET = 1
+
 
 def validate_material_parameters(material: dict[str, dict[str, Any]]) -> bool:
     elastic = Schema(

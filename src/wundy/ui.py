@@ -5,6 +5,8 @@ from typing import Any
 import numpy as np
 import yaml
 
+from .schemas import DIRICHLET
+from .schemas import NEUMANN
 from .schemas import input_schema
 
 logger = logging.getLogger(__name__)
@@ -107,7 +109,7 @@ def preprocess(data: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]]:
             errors += 1
             logger.error(f"nodeset {boundary['nset']} not defined")
             continue
-        tag = 1 if boundary["type"] == "dirichlet" else 0
+        tag = DIRICHLET if boundary["type"] == "dirichlet" else NEUMANN
         dof = boundary["dof"]
         for node in nodes:
             doftags[node, dof] = tag

@@ -3,9 +3,8 @@ from typing import Any
 import numpy as np
 from numpy.typing import NDArray
 
+from .schemas import DIRICHLET
 
-NEUMANN = 0
-DIRICHLET = 1
 
 def first_fe_code(
     coords: NDArray[float],
@@ -44,7 +43,9 @@ def first_fe_code(
 
             xe = coords[nodes]
             he = xe[1, 0] - xe[0, 0]
-            ke = A * E / he * np.array([[1.0, -1.0], [-1.0, 1.0]])
+            if np.isclose(he, 0.0):
+                raise ValueError(f"Zero-length element detected between nodes {nodes}")
+            ke = A * E / he * np.array([[2.0, -1.0], [-1.0, 1.0]])
             K[np.ix_(dofs, dofs)] += ke
 
             # Distributed load contribution
