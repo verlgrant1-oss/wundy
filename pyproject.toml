@@ -40,6 +40,8 @@ format.skip-magic-trailing-comma = false
 format.docstring-code-line-length = "dynamic"
 format.docstring-code-format = false
 lint.select = [ "F", "I" ]
+lint.ignore = [ "E731", "E741", "F841" ]
+lint.isort.force-single-line = true
 lint.per-file-ignores."src/wundy/__init__.py" = [ "F401", "F403", "F405" ]
 
 [tool.ty.src]

@@ -9,21 +9,28 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 cd $SCRIPT_DIR/..
 
 echo ""
-echo "===================="
-echo "ruff: formatting src"
-echo "===================="
+echo "============================="
+echo "ruff: formatting src & tests"
+echo "============================="
 ruff format src
 ruff format tests
 
 echo ""
-echo "=================="
-echo "ruff: checking src"
-echo "=================="
+echo "=========================="
+echo "ruff: checking src & tests"
+echo "=========================="
 ruff check --fix src
 ruff check --fix tests
 
 echo ""
-echo "================="
-echo "ty: checking src"
-echo "================="
+echo "========================"
+echo "ty: checking src & tests"
+echo "========================"
 ty check src
+ty check tests
+
+echo ""
+echo "======================"
+echo "pytests: running tests"
+echo "======================"
+pytest tests
