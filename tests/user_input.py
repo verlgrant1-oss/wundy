@@ -7,7 +7,8 @@ import wundy
 
 def test_load_input():
     file = io.StringIO()
-    file.write("""\
+    file.write(
+        """\
 wundy:
   coords: [0, 1, 2]
   connect: [[0, 1], [1, 2]]
@@ -33,7 +34,8 @@ wundy:
     name: block-1
     elements: all
     element_type: t1d1
-""")
+"""
+    )
     file.seek(0)
     data = wundy.ui.load(file)
 

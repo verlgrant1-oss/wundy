@@ -32,3 +32,5 @@ In the `wundy` directory, execute
 ```console
 pytest
 ```
+## Documentation
+See the [User Manual](docs/USER_MANUAL.md)

@@ -15,7 +15,9 @@ def validate_material_parameters(material: dict[str, dict[str, Any]]) -> bool:
     elastic = Schema(
         {
             "E": And(float, lambda x: x > 0.0, error="E must be > 0"),
-            "nu": And(float, lambda x: -1.0 <= x < 0.5, error="nu must be between -1 and .5"),
+            "nu": And(
+                float, lambda x: -1.0 <= x < 0.5, error="nu must be between -1 and .5"
+            ),
         }
     )
     if material["type"] == "elastic":
@@ -149,7 +151,9 @@ block_schema = Schema(
                 And(str, Use(lambda s: s.lower())),
                 And(list, lambda outer: all(isinstance(_, int) for _ in outer)),
             ),
-            "element_type": And(str, lambda s: s.lower() in ("t1d1",), Use(lambda n: n.lower())),
+            "element_type": And(
+                str, lambda s: s.lower() in ("t1d1",), Use(lambda n: n.lower())
+            ),
             Optional("element_properties", default=dict()): dict,
         },
         lambda d: validate_element_properties(d),
