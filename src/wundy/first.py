@@ -4,6 +4,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 
+NEUMANN = 0
+DIRICHLET = 1
+
 def first_fe_code(
     coords: NDArray[float],
     connect: NDArray[int],
@@ -49,16 +52,16 @@ def first_fe_code(
             F[np.ix_(dofs)] += qe
 
     # Apply boundary conditions
-    Kbc = np.array(K)
-    Fbc = np.array(F)
+    Kbc = K.copy()
+    Fbc = F.copy()
     for n, tags in enumerate(doftags):
         for j, tag in enumerate(tags):
             # n is the node number, j is the local dof
-            if tag == 1:
+            if tag == DIRICHLET:
                 # Dirichlet
                 # Apply boundary conditions such that the matrix remains symmetric
                 I = n * dof_per_node + j
-                Fbc -= [K[k, I] * dofvals[n, j] for k in range(num_node * dof_per_node)]
+                Fbc -= K[:, I] * dofvals[n, j]
                 Kbc[I, :] = Kbc[:, I] = 0
                 Kbc[I, I] = 1
 
@@ -66,7 +69,7 @@ def first_fe_code(
     # This must be done after the loop above.
     for n, tags in enumerate(doftags):
         for j, tag in enumerate(tags):
-            if tag == 1:
+            if tag == DIRICHLET:
                 I = n * dof_per_node + j
                 Fbc[I] = dofvals[n, j]
 
