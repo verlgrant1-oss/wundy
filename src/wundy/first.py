@@ -67,7 +67,8 @@ def first_fe_code(
     for n, tags in enumerate(doftags):
         for j, tag in enumerate(tags):
             if tag == 1:
-                Fbc[n * dof_per_node + j] = dofvals[n, j]
+                I = n * dof_per_node + j
+                Fbc[I] = dofvals[n, j]
 
     # solve the system
     u = np.linalg.solve(Kbc, Fbc)
