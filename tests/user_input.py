@@ -9,8 +9,7 @@ from wundy.schemas import NEUMANN
 
 def user_input() -> io.StringIO:
     file = io.StringIO()
-    file.write(
-        """\
+    file.write("""\
 wundy:
   nodes: [[1, 0], [2, 1], [3, 2]]
   elements: [[1, 1, 2], [2, 2, 3]]
