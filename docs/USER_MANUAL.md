@@ -54,3 +54,31 @@ wundy:
       name: block-1
       elements: all
       element_type: t1d1
+
+## Material models
+
+At present, `wundy` supports a single 1D material model for the bar elements:
+
+### Linear elastic bar (`type: ELASTIC`)
+
+This is a small-strain, linear-elastic constitutive law for an axially loaded
+bar. The stress–strain relation is
+
+> σ = E ε
+
+where
+
+- σ is the axial stress,
+- ε is the axial strain, and
+- E is Young’s modulus.
+
+In the input file, a linear-elastic material is defined as:
+
+```yaml
+materials:
+  - type: ELASTIC
+    name: STEEL
+    parameters:
+      E: 210e9    # Young's modulus (Pa)
+      nu: 0.3     # Poisson's ratio (validated but not used in 1D)
+    density: 7850 # optional, required only for gravity loads
