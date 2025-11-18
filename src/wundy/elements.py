@@ -5,7 +5,32 @@ from typing import Mapping, Any
 import numpy as np
 from numpy.typing import NDArray
 
-from .materials import linear_elastic_tangent, linear_elastic_stress
+from .materials import (
+    linear_elastic_tangent,
+    linear_elastic_stress,
+    neo_hooke_tangent,
+    neo_hooke_stress,
+)
+# ---------------------------------------------------------------------
+# Material selection for stiffness and stress
+# ---------------------------------------------------------------------
+def material_tangent(material, strain):
+    mtype = material["type"].upper()
+    if mtype == "ELASTIC":
+        return linear_elastic_tangent(material, strain)
+    if mtype == "NEO_HOOKE":
+        return neo_hooke_tangent(material, strain)
+    raise NotImplementedError(f"Unknown material type {mtype}")
+
+
+def material_stress(material, strain):
+    mtype = material["type"].upper()
+    if mtype == "ELASTIC":
+        return linear_elastic_stress(material, strain)
+    if mtype == "NEO_HOOKE":
+        return neo_hooke_stress(material, strain)
+    raise NotImplementedError(f"Unknown material type {mtype}")
+
 
 
 def gauss_points_1d(ngauss: int) -> tuple[NDArray[float], NDArray[float]]:
@@ -158,3 +183,24 @@ def t1d1_element_uniform_load(
 
     return f_ext
 
+# ---------------------------------------------------------------------
+# Element Residual (for Newton solver)
+# ---------------------------------------------------------------------
+def t1d1_element_residual(
+    x_e: NDArray[float],
+    u_e: NDArray[float],
+    area: float,
+    material: Mapping[str, Any],
+    f_ext_e: NDArray[float],
+    ngauss: int = 2,
+) -> NDArray[float]:
+    """
+    Compute the element residual vector:
+        r_e = f_int - f_ext
+    where:
+        f_int = internal force (from constitutive model)
+        f_ext = external nodal loads acting on the element
+    """
+    f_int = t1d1_element_internal_force(x_e, u_e, area, material, ngauss)
+    r_e = f_int - f_ext_e
+    return r_e

@@ -57,3 +57,50 @@ def linear_elastic_stress(material: Mapping[str, Any], strain: float) -> float:
     Et = linear_elastic_tangent(material, strain)
     return Et * float(strain)
 
+
+# ---------------------------------------------------------------------
+# 1D Neo-Hookean Hyperelastic Material Model (Week 3)
+# ---------------------------------------------------------------------
+
+def neo_hooke_stress(material: Mapping[str, Any], strain: float) -> float:
+    """
+    Compute 1D Neo-Hookean axial stress for a bar element.
+
+    The 1D form is:
+        lambda = 1 + strain
+        sigma = mu * (lambda - 1/lambda**2)
+
+    where mu = E / (2*(1+nu))
+    """
+    params = material["parameters"]
+    E = params["E"]
+    nu = params.get("nu", 0.0)
+
+    mu = E / (2 * (1 + nu))
+    lam = 1.0 + strain
+    if lam <= 0:
+        raise ValueError("Neo-Hooke requires lambda > 0 (no element inversion)")
+
+    sigma = mu * (lam - 1.0 / lam**2)
+    return float(sigma)
+
+
+def neo_hooke_tangent(material: Mapping[str, Any], strain: float) -> float:
+    """
+    Tangent stiffness dσ/dε for 1D Neo-Hooke.
+
+        lambda = 1 + strain
+        dσ/dλ = mu * (1 + 2/λ^3)
+        dσ/dε = dσ/dλ * dλ/dε = mu * (1 + 2/λ^3)
+    """
+    params = material["parameters"]
+    E = params["E"]
+    nu = params.get("nu", 0.0)
+
+    mu = E / (2 * (1 + nu))
+    lam = 1.0 + strain
+    if lam <= 0:
+        raise ValueError("Neo-Hooke requires lambda > 0")
+
+    tangent = mu * (1 + 2.0 / lam**3)
+    return float(tangent)
