@@ -1,0 +1,30 @@
+wundy:
+  coords: [0,1,2,3,4]
+  connect:
+    - [0,1]
+    - [1,2]
+    - [2,3]
+    - [3,4]
+
+  boundary:
+    - node: 0
+      value: 0.0
+
+  cload:
+    - node: 4
+      amplitude: 2.0
+
+  material:
+    - type: ELASTIC
+      name: MAT_LINEAR
+      parameters:
+        E: 10.0
+
+  element block:
+    - name: bar-block
+      material: MAT_LINEAR
+      elements: all
+      element_type: t1d1
+
+  solver:
+    type: linear

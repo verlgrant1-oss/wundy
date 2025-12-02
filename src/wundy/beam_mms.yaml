@@ -1,0 +1,33 @@
+wundy:
+  coords: [0, 0.25, 0.5, 0.75, 1.0]
+  connect:
+    - [0,1]
+    - [1,2]
+    - [2,3]
+    - [3,4]
+
+  boundary:
+    - node: 0
+      value: 0.0
+
+  distributed loads:
+    - name: load1
+      elements: all
+      type: BX
+      value: -1.0
+      direction: [1]
+
+  material:
+    - type: ELASTIC
+      name: MAT_LINEAR
+      parameters:
+        E: 10.0
+
+  element block:
+    - name: block1
+      material: MAT_LINEAR
+      elements: all
+      element_type: t1d1
+
+  solver:
+    type: linear
