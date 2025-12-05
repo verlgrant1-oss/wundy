@@ -1,206 +1,283 @@
+"""
+elements.py
+-----------
+1D two-node bar / truss element (T1D1) routines.
+
+This module provides element-level operations required by the tests:
+
+    t1d1_element_stiffness(x_e, A, material, ngauss=2)
+    t1d1_element_internal_force(x_e, u_e, A, material, ngauss=2)
+    t1d1_element_uniform_load(x_e, A, q, direction, ngauss=2)
+
+where:
+    x_e       : array-like of shape (2,), nodal coordinates [x1, x2]
+    u_e       : array-like of shape (2,), nodal displacements [u1, u2]
+    A         : cross-sectional area (float)
+    material  : material dictionary, e.g.
+                {
+                    "type": "ELASTIC",
+                    "name": "STEEL",
+                    "parameters": {"E": 100.0, "nu": 0.3},
+                    "density": 1.0,
+                }
+    q         : uniform distributed load (per unit length)
+    direction : scalar factor (+1 or -1 for axial direction)
+    ngauss    : number of Gauss points (1 or 2)
+
+The tests assume linear elasticity, but the implementation is compatible
+with nonlinear materials via the dispatchers in materials.py.
+"""
+
 from __future__ import annotations
 
-from typing import Mapping, Any
-
 import numpy as np
-from numpy.typing import NDArray
 
-from .materials import (
-    linear_elastic_tangent,
-    linear_elastic_stress,
-    neo_hooke_tangent,
-    neo_hooke_stress,
-)
-# ---------------------------------------------------------------------
-# Material selection for stiffness and stress
-# ---------------------------------------------------------------------
-def material_tangent(material, strain):
-    mtype = material["type"].upper()
-    if mtype == "ELASTIC":
-        return linear_elastic_tangent(material, strain)
-    if mtype == "NEO_HOOKE":
-        return neo_hooke_tangent(material, strain)
-    raise NotImplementedError(f"Unknown material type {mtype}")
+from .materials import get_material_stress, get_material_tangent
 
 
-def material_stress(material, strain):
-    mtype = material["type"].upper()
-    if mtype == "ELASTIC":
-        return linear_elastic_stress(material, strain)
-    if mtype == "NEO_HOOKE":
-        return neo_hooke_stress(material, strain)
-    raise NotImplementedError(f"Unknown material type {mtype}")
+# ----------------------------------------------------------------------
+# Gauss–Legendre quadrature helper
+# ----------------------------------------------------------------------
 
 
-
-def gauss_points_1d(ngauss: int) -> tuple[NDArray[float], NDArray[float]]:
+def _gauss_legendre_1d(ngauss: int):
     """
-    Return Gauss–Legendre points and weights on [-1, 1] for 1D integration.
-    Supported: 1 or 2 points.
+    Return Gauss–Legendre points and weights on [-1, 1].
+
+    Supports ngauss = 1 or 2 (sufficient for our linear 1D bar).
     """
     if ngauss == 1:
-        xi = np.array([0.0])
-        w = np.array([2.0])
+        pts = np.array([0.0])
+        wts = np.array([2.0])
     elif ngauss == 2:
-        g = 1.0 / np.sqrt(3.0)
-        xi = np.array([-g, g])
-        w = np.array([1.0, 1.0])
+        a = 1.0 / np.sqrt(3.0)
+        pts = np.array([-a, a])
+        wts = np.array([1.0, 1.0])
     else:
-        raise NotImplementedError(
-            f"gauss_points_1d supports ngauss = 1 or 2, got {ngauss}"
-        )
-    return xi, w
+        raise ValueError(f"Unsupported number of Gauss points: {ngauss}")
+    return pts, wts
 
 
-def t1d1_shape_functions(xi: float) -> tuple[NDArray[float], NDArray[float]]:
+# ----------------------------------------------------------------------
+# Shape functions and kinematics
+# ----------------------------------------------------------------------
+
+
+def _element_length(x_e: np.ndarray) -> float:
+    x_e = np.asarray(x_e, dtype=float).ravel()
+    if x_e.size != 2:
+        raise ValueError(f"T1D1 expects 2 nodal coordinates, got {x_e}")
+    L = x_e[1] - x_e[0]
+    if L <= 0.0:
+        raise ValueError(f"Element length must be positive, got L={L}")
+    return L
+
+
+def _shape_functions(ksi: float):
     """
-    Shape functions and derivatives for a 2-node 1D bar element (T1D1).
+    Linear 2-node shape functions N1, N2 at natural coordinate ksi ∈ [-1, 1].
     """
-    N = np.array([(1.0 - xi) / 2.0, (1.0 + xi) / 2.0])
-    dN_dxi = np.array([-0.5, 0.5])
-    return N, dN_dxi
+    N1 = 0.5 * (1.0 - ksi)
+    N2 = 0.5 * (1.0 + ksi)
+    return np.array([N1, N2])
+
+
+def _B_matrix(L: float):
+    """
+    Strain–displacement "matrix" B for 1D bar:
+
+        ε = B * u_e
+
+    For a two-node element:
+
+        B = [-1/L, 1/L]
+    """
+    return np.array([-1.0 / L, 1.0 / L])
+
+
+# ----------------------------------------------------------------------
+# Public element routines
+# ----------------------------------------------------------------------
 
 
 def t1d1_element_stiffness(
-    x_e: NDArray[float],
-    area: float,
-    material: Mapping[str, Any],
+    x_e,
+    A: float,
+    material: dict,
     ngauss: int = 2,
-) -> NDArray[float]:
+) -> np.ndarray:
     """
-    2x2 element stiffness for a 1D bar (T1D1) using Gauss quadrature.
+    Element stiffness matrix for a 2-node 1D bar element.
+
+    For linear elasticity, the closed form is:
+
+        k_e = (E * A / L) * [[ 1, -1],
+                             [-1,  1]]
+
+    This function is implemented via Gauss integration so that it can
+    also be used with nonlinear tangent moduli if needed.
+
+    Parameters
+    ----------
+    x_e : array-like of length 2
+        Nodal coordinates [x1, x2].
+    A : float
+        Cross-sectional area.
+    material : dict
+        Material dictionary with at least parameters['E'].
+    ngauss : int
+        Number of Gauss points (1 or 2).
+
+    Returns
+    -------
+    ke : (2, 2) ndarray
+        Element stiffness matrix.
     """
-    x_e = np.asarray(x_e, dtype=float).reshape(-1)
-    if x_e.size != 2:
-        raise ValueError("t1d1_element_stiffness expects 2 nodes")
+    x_e = np.asarray(x_e, dtype=float).ravel()
+    L = _element_length(x_e)
+    A = float(A)
 
-    A = float(area)
-    if A <= 0.0:
-        raise ValueError(f"Area must be positive, got {A}")
-
-    x1, x2 = x_e
-    L = x2 - x1
-    if np.isclose(L, 0.0):
-        raise ValueError("Zero-length element in t1d1_element_stiffness")
-
-    J = L / 2.0
-    detJ = abs(J)
-
-    # B is constant for linear 2-node bar
-    _, dN_dxi = t1d1_shape_functions(0.0)
-    dN_dx = dN_dxi / J
-    B = dN_dx.reshape(1, -1)  # (1 x 2)
-
-    Et = linear_elastic_tangent(material, strain=0.0)
+    # For linear elasticity, tangent is constant; we evaluate at strain = 0.
+    # For nonlinear materials, a more advanced routine could pass in strain.
+    Et = get_material_tangent(material, strain=0.0)
 
     ke = np.zeros((2, 2), dtype=float)
-    xi_g, w_g = gauss_points_1d(ngauss)
-    for w in w_g:
-        ke += B.T @ (Et * A * B) * detJ * w
+    B = _B_matrix(L)
+
+    ksi_pts, wts = _gauss_legendre_1d(ngauss)
+    J = L / 2.0
+
+    for w in wts:
+        # contribution: B^T * Et * A * B * J * w
+        ke += np.outer(B, B) * (Et * A * J * w)
 
     return ke
 
 
 def t1d1_element_internal_force(
-    x_e: NDArray[float],
-    u_e: NDArray[float],
-    area: float,
-    material: Mapping[str, Any],
+    x_e,
+    u_e,
+    A: float,
+    material: dict,
     ngauss: int = 2,
-) -> NDArray[float]:
+) -> np.ndarray:
     """
-    2x1 internal force vector for a 1D bar (T1D1) using Gauss quadrature.
+    Internal force vector for a 2-node 1D bar element.
+
+    Definition:
+
+        f_int = ∫ B^T * σ(ε) * A dx
+
+    For linear elasticity with constant strain, this reduces to:
+
+        f_int = [ -σ A,
+                   σ A ]
+
+    where σ = E * (u2 - u1) / L.
+
+    Parameters
+    ----------
+    x_e : array-like of length 2
+        Nodal coordinates [x1, x2].
+    u_e : array-like of length 2
+        Nodal displacements [u1, u2].
+    A : float
+        Cross-sectional area.
+    material : dict
+        Material dictionary.
+    ngauss : int
+        Number of Gauss points.
+
+    Returns
+    -------
+    f_int : (2,) ndarray
+        Element internal force vector.
     """
-    x_e = np.asarray(x_e, dtype=float).reshape(-1)
-    u_e = np.asarray(u_e, dtype=float).reshape(-1)
+    x_e = np.asarray(x_e, dtype=float).ravel()
+    u_e = np.asarray(u_e, dtype=float).ravel()
+    if u_e.size != 2:
+        raise ValueError(f"T1D1 expects 2 nodal displacements, got {u_e}")
 
-    if x_e.size != 2 or u_e.size != 2:
-        raise ValueError("t1d1_element_internal_force expects 2-node element")
+    L = _element_length(x_e)
+    A = float(A)
 
-    A = float(area)
-    if A <= 0.0:
-        raise ValueError(f"Area must be positive, got {A}")
+    B = _B_matrix(L)
+    # Constant strain in a linear 2-node bar:
+    strain = float(B @ u_e)
 
-    x1, x2 = x_e
-    L = x2 - x1
-    if np.isclose(L, 0.0):
-        raise ValueError("Zero-length element in t1d1_element_internal_force")
-
-    J = L / 2.0
-    detJ = abs(J)
+    sigma = get_material_stress(material, strain)
 
     f_int = np.zeros(2, dtype=float)
-    xi_g, w_g = gauss_points_1d(ngauss)
+    ksi_pts, wts = _gauss_legendre_1d(ngauss)
+    J = L / 2.0
 
-    for xi, w in zip(xi_g, w_g):
-        _, dN_dxi = t1d1_shape_functions(xi)
-        dN_dx = dN_dxi / J
-        B = dN_dx.reshape(1, -1)
-
-        strain = float(B @ u_e)
-        sigma = linear_elastic_stress(material, strain)
-
-        f_int += (B.T * (sigma * A) * detJ * w).reshape(2)
+    for w in wts:
+        # contribution: B^T * σ * A * J * w
+        f_int += B * (sigma * A * J * w)
 
     return f_int
 
 
 def t1d1_element_uniform_load(
-    x_e: NDArray[float],
-    area: float,
+    x_e,
+    A: float,
     q: float,
-    direction: float,
+    direction,
     ngauss: int = 2,
-) -> NDArray[float]:
+) -> np.ndarray:
     """
-    2x1 external force vector for a uniform line/body load on a T1D1 element.
+    Consistent nodal load vector for a uniform distributed load.
+
+    Definition:
+
+        f_ext = ∫ N^T * q * A * dir dx
+
+    For a constant q and unit area, the classic result is:
+
+        f_ext = [ q L / 2,
+                  q L / 2 ]
+
+    (as checked in test_t1d1_element_uniform_load_matches_classic_result).
+
+    Parameters
+    ----------
+    x_e : array-like of length 2
+        Nodal coordinates [x1, x2].
+    A : float
+        Cross-sectional area (kept for generality).
+    q : float
+        Uniform load intensity (per unit length).
+    direction : float or array-like
+        Direction factor; scalar in axial problems.
+    ngauss : int
+        Number of Gauss points.
+
+    Returns
+    -------
+    f_ext : (2,) ndarray
+        Element equivalent nodal force vector.
     """
-    x_e = np.asarray(x_e, dtype=float).reshape(-1)
-    if x_e.size != 2:
-        raise ValueError("t1d1_element_uniform_load expects 2-node element")
+    x_e = np.asarray(x_e, dtype=float).ravel()
+    L = _element_length(x_e)
+    A = float(A)
+    q = float(q)
 
-    A = float(area)
-    x1, x2 = x_e
-    L = x2 - x1
-    if np.isclose(L, 0.0):
-        raise ValueError("Zero-length element in t1d1_element_uniform_load")
-
-    J = L / 2.0
-    detJ = abs(J)
-
-    dir_sign = float(np.sign(direction))
-    if dir_sign == 0.0:
-        raise ValueError(f"direction must be ±1, got {direction}")
-
-    q_eff = float(q) * dir_sign * A
+    # direction may be passed as scalar or list; reduce to scalar
+    if isinstance(direction, (list, tuple, np.ndarray)):
+        if len(direction) == 0:
+            raise ValueError("direction must not be empty")
+        direction_scalar = float(direction[0])
+    else:
+        direction_scalar = float(direction)
 
     f_ext = np.zeros(2, dtype=float)
-    xi_g, w_g = gauss_points_1d(ngauss)
 
-    for xi, w in zip(xi_g, w_g):
-        N, _ = t1d1_shape_functions(xi)
-        f_ext += N * q_eff * detJ * w
+    ksi_pts, wts = _gauss_legendre_1d(ngauss)
+    J = L / 2.0
+
+    for ksi, w in zip(ksi_pts, wts):
+        N = _shape_functions(ksi)  # [N1, N2]
+        # contribution: N^T * q * A * direction * J * w
+        f_ext += N * (q * A * direction_scalar * J * w)
 
     return f_ext
-
-# ---------------------------------------------------------------------
-# Element Residual (for Newton solver)
-# ---------------------------------------------------------------------
-def t1d1_element_residual(
-    x_e: NDArray[float],
-    u_e: NDArray[float],
-    area: float,
-    material: Mapping[str, Any],
-    f_ext_e: NDArray[float],
-    ngauss: int = 2,
-) -> NDArray[float]:
-    """
-    Compute the element residual vector:
-        r_e = f_int - f_ext
-    where:
-        f_int = internal force (from constitutive model)
-        f_ext = external nodal loads acting on the element
-    """
-    f_int = t1d1_element_internal_force(x_e, u_e, area, material, ngauss)
-    r_e = f_int - f_ext_e
-    return r_e

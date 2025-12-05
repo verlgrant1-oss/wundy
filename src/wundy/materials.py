@@ -1,106 +1,79 @@
-from __future__ import annotations
+"""
+materials.py
+------------
+Material routines for 1D FE solver.
+"""
 
-from typing import Mapping, Any
+# ------------------------------------------------------------
+# Linear Elastic
+# ------------------------------------------------------------
 
-
-def linear_elastic_tangent(material: Mapping[str, Any], strain: float) -> float:
-    """
-    Return the material tangent stiffness dσ/dε for a 1D linear-elastic model.
-
-    Parameters
-    ----------
-    material
-        Material dictionary as parsed from the input file. Must contain:
-        - ``"type"``: currently expected to be ``"ELASTIC"``
-        - ``"parameters"["E"]``: Young's modulus (E > 0)
-    strain
-        Current axial strain ε at the material point. For linear elasticity,
-        the tangent stiffness is independent of strain but the argument is
-        included to keep the interface compatible with non-linear models.
-
-    Returns
-    -------
-    float
-        Axial tangent stiffness dσ/dε (equal to E for a linear-elastic bar).
-    """
-    mtype = material.get("type", "").upper()
-    if mtype != "ELASTIC":
-        raise NotImplementedError(
-            f"Material type {mtype!r} not implemented in linear_elastic_tangent"
+def _get_E(material: dict) -> float:
+    try:
+        return float(material["parameters"]["E"])
+    except KeyError:
+        raise KeyError(
+            f"Material dictionary must contain parameters['E'], got: {material}"
         )
 
-    E = material["parameters"]["E"]
-    if E <= 0.0:
-        raise ValueError(f"Young's modulus must be positive, got {E}")
 
-    return float(E)
+def linear_elastic_tangent(material: dict, strain: float) -> float:
+    return _get_E(material)
 
 
-def linear_elastic_stress(material: Mapping[str, Any], strain: float) -> float:
-    """
-    Compute axial stress for a 1D linear-elastic material σ = E ε.
-
-    Parameters
-    ----------
-    material
-        Material dictionary as parsed from the input file. Must contain:
-        - ``"type"``: currently expected to be ``"ELASTIC"``
-        - ``"parameters"["E"]``: Young's modulus (E > 0)
-    strain
-        Axial strain ε at the material point.
-
-    Returns
-    -------
-    float
-        Axial Cauchy stress σ.
-    """
-    Et = linear_elastic_tangent(material, strain)
-    return Et * float(strain)
+def linear_elastic_stress(material: dict, strain: float) -> float:
+    E = _get_E(material)
+    return E * float(strain)
 
 
-# ---------------------------------------------------------------------
-# 1D Neo-Hookean Hyperelastic Material Model (Week 3)
-# ---------------------------------------------------------------------
+# ------------------------------------------------------------
+# Neo-Hookean (1D demonstration model)
+# Accept both:  NEO_HOOKE   and   NEOHOOKEAN
+# ------------------------------------------------------------
 
-def neo_hooke_stress(material: Mapping[str, Any], strain: float) -> float:
-    """
-    Compute 1D Neo-Hookean axial stress for a bar element.
-
-    The 1D form is:
-        lambda = 1 + strain
-        sigma = mu * (lambda - 1/lambda**2)
-
-    where mu = E / (2*(1+nu))
-    """
-    params = material["parameters"]
-    E = params["E"]
-    nu = params.get("nu", 0.0)
-
-    mu = E / (2 * (1 + nu))
-    lam = 1.0 + strain
-    if lam <= 0:
-        raise ValueError("Neo-Hooke requires lambda > 0 (no element inversion)")
-
-    sigma = mu * (lam - 1.0 / lam**2)
-    return float(sigma)
+def neo_hookean_stress(material: dict, strain: float) -> float:
+    E = _get_E(material)
+    alpha = material.get("parameters", {}).get("alpha", 0.0)
+    strain = float(strain)
+    return E * strain * (1.0 + alpha * strain)
 
 
-def neo_hooke_tangent(material: Mapping[str, Any], strain: float) -> float:
-    """
-    Tangent stiffness dσ/dε for 1D Neo-Hooke.
+def neo_hookean_tangent(material: dict, strain: float) -> float:
+    E = _get_E(material)
+    alpha = material.get("parameters", {}).get("alpha", 0.0)
+    strain = float(strain)
+    return E * (1.0 + 2.0 * alpha * strain)
 
-        lambda = 1 + strain
-        dσ/dλ = mu * (1 + 2/λ^3)
-        dσ/dε = dσ/dλ * dλ/dε = mu * (1 + 2/λ^3)
-    """
-    params = material["parameters"]
-    E = params["E"]
-    nu = params.get("nu", 0.0)
 
-    mu = E / (2 * (1 + nu))
-    lam = 1.0 + strain
-    if lam <= 0:
-        raise ValueError("Neo-Hooke requires lambda > 0")
+# ------------------------------------------------------------
+# Material Dispatcher
+# ------------------------------------------------------------
 
-    tangent = mu * (1 + 2.0 / lam**3)
-    return float(tangent)
+def _norm_type(material: dict) -> str:
+    """Normalize all material type variants to a single form."""
+    m = material["type"].upper().replace(" ", "").replace("-", "").replace("_", "")
+    return m
+
+
+def get_material_stress(material: dict, strain: float) -> float:
+    mtype = _norm_type(material)
+
+    if mtype == "ELASTIC":
+        return linear_elastic_stress(material, strain)
+
+    if mtype in {"NEOHOOKE", "NEOHOOKEAN"}:
+        return neo_hookean_stress(material, strain)
+
+    raise ValueError(f"Unknown material type: {material}")
+
+
+def get_material_tangent(material: dict, strain: float) -> float:
+    mtype = _norm_type(material)
+
+    if mtype == "ELASTIC":
+        return linear_elastic_tangent(material, strain)
+
+    if mtype in {"NEOHOOKE", "NEOHOOKEAN"}:
+        return neo_hookean_tangent(material, strain)
+
+    raise ValueError(f"Unknown material type: {material}")

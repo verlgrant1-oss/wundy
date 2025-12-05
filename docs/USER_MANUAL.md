@@ -1,271 +1,309 @@
-Wundy User Manual
-1. Introduction
+# USER MANUAL — WUNDY Finite Element Framework  
+Comprehensive documentation for the WUNDY 1D finite-element analysis system.
 
-Wundy is a 1-dimensional finite element solver for bars and beams under small-strain assumptions. It supports linear elastic behavior and a nonlinear 1D Neo-Hookean material and solves nonlinear problems using the Newton–Raphson method. All problems are defined entirely through YAML input files.
+---
 
-2. Problem Statement and Governing Equations
+# 1. Purpose of WUNDY
+WUNDY is a modular 1D finite-element framework designed to demonstrate:
 
-Wundy solves 1D, small-strain, quasi-static problems for bars and beams.
+- Linear elastic material behavior  
+- Nonlinear (Neo-Hookean) bar response  
+- Newton–Raphson nonlinear solving  
+- YAML-driven model specification  
+- Full preprocess → assembly → solve workflow  
+- Automated testing of all major subsystems  
 
-2.1 Small-Strain Kinematics
+This manual provides a complete explanation of how the framework is structured, how it operates, and how to run and extend it.
 
-ε(x) = du/dx
+---
 
-2.2 Equilibrium (Strong Form)
+# 2. System Architecture
 
-Bar with distributed load b(x):
-d(Aσ)/dx + b(x) = 0
+```
+YAML input  
+     ↓  
+Preprocessing (ui.py)  
+     ↓  
+Assembly (elements.py, materials.py)  
+     ↓  
+Linear or Nonlinear Solve (first.py or solver.py)  
+     ↓  
+Output (DOFs, reactions, stiffness, forces)
+```
 
-Beam with distributed load q(x):
-EI d⁴w/dx⁴ + q(x) = 0
+Each component is isolated and modular so the system can easily be extended.
 
-2.3 Weak Form
+---
 
-r(u) = f_ext – f_int = 0
-Linear case: Ku = f
+# 3. YAML Input Format
 
-3. Material Models
-3.1 Linear Elastic
+A model is defined entirely in a YAML file containing:
 
+- **nodes**  
+- **elements**  
+- **materials**  
+- **element blocks**  
+- **boundary conditions**  
+- **concentrated loads**  
+- **distributed loads**
+
+Example:
+
+```yaml
+wundy:
+  nodes: [[1,0], [2,1], [3,2]]
+  elements: [[1,1,2], [2,2,3]]
+  materials:
+    - type: elastic
+      name: MAT-1
+      parameters: {E: 10.0, nu: 0.3}
+  element blocks:
+    - name: BLOCK-1
+      material: MAT-1
+      elements: all
+      element: {type: T1D1, properties: {area: 1.0}}
+```
+
+All input is validated using schema rules.
+
+---
+
+# 4. Preprocessing (ui.py)
+
+Preprocessing converts the YAML into arrays and mappings ready for the solver.
+
+### What it produces:
+
+- `coords` → matrix of nodal coordinates  
+- `blocks` → list of element blocks  
+- `materials` → dictionary of material definitions  
+- `bcs` → boundary conditions  
+- `dload` → distributed loads  
+- `block_elem_map` → mapping from block to global element indices  
+- `node_map` and `elem_map` → 1-based → 0-based conversions  
+
+### Zero-Based Mapping Diagram
+```
+User YAML nodes: 1,2,3,4 → internal indices: 0,1,2,3
+User elements: 1,2,3,4 → internal indices: 0,1,2,3
+```
+
+This ensures vector assembly works correctly.
+
+---
+
+# 5. Elements (elements.py)
+
+## 5.1 T1D1 Bar Element
+
+### Strain
+```
+ε = (u2 – u1) / L
+```
+
+### Stiffness Matrix (Linear)
+```
+k = (E*A / L) * [[ 1, -1],
+                 [-1, 1]]
+```
+
+### Internal Force
+```
+R_int = Bᵀ σ A
+B = [-1/L, 1/L]
+```
+
+The element library supports both linear and nonlinear materials.
+
+---
+
+# 6. Material Models (materials.py)
+
+## 6.1 Linear Elastic
+```
 σ = E ε
-Tangent modulus = E
+tangent = E
+```
 
-3.2 1D Neo-Hookean
+## 6.2 Neo-Hookean (1D Demonstration)
+A simple nonlinear stress law used in the nonlinear example:
 
-λ = 1 + ε
-Provides nonlinear stress and tangent modulus.
+```
+σ = E ε (1 + α ε)
+tangent = E (1 + 2 α ε)
+```
 
-4. Boundary Conditions and Loads
-4.1 Dirichlet BCs
+This enables nonlinear solving without requiring 3D hyperelasticity.
 
-Prescribed displacement at a node (u = value).
+---
 
-4.2 Nodal Forces
+# 7. Assembly Procedure
 
-Concentrated forces at nodes.
+Global stiffness and force assembly follow:
 
-4.3 Distributed Loads
+```
+For each element:
+    Compute ke
+    Compute internal forces
+    Map local DOFs → global DOFs
+    Insert ke into global K
+```
 
-Converted to equivalent nodal forces using Gauss quadrature.
+External forces come from:
 
-5. Newton–Raphson Method
+- Dirichlet BC reaction extraction  
+- Concentrated loads  
+- Distributed loads  
 
-Residual: r = f_ext – f_int
-Tangent stiffness: K_T = ∂f_int/∂u
+Global DOF numbering (1 DOF per node):
 
-Iteration steps:
+```
+global_dof = node_index * dof_per_node + local_dof
+```
 
-Initial guess
+---
 
-Compute residual
+# 8. Solvers
 
-Compute tangent
+## 8.1 Basic Linear Solver (first.py)
 
-Solve K_T Δu = r
+Used for tests and simple models. It:
 
-Update u
+- Assembles global K  
+- Applies boundary conditions  
+- Applies concentrated loads  
+- Solves for displacements  
+- Returns DOFs, stiffness, forces, reactions  
 
-Check convergence
+This file validates the entire preprocessing and assembly pipeline.
 
-6. YAML Input Structure
-6.1 Top-Level Layout
+---
 
-wundy:
-coords: [...]
-connect: [...]
-boundary: [...]
-cload: [...]
-material: [...]
-element block: [...]
-solver: {...}
+## 8.2 Newton–Raphson Nonlinear Solver (solver.py)
 
-6.2 Node Coordinates
+Used when any material is `"type: NEOHOOKEAN"`.
 
-coords: [0.0, 1.0, 2.0, 3.0]
+Algorithm:
 
-6.3 Connectivity
+```
+u = 0
+repeat until converged:
+    Assemble tangent stiffness K
+    Assemble internal force R_int
+    residual r = Fext - R_int
+    solve K Δu = r
+    u ← u + Δu
+```
 
-connect:
+Linear problems converge in 1 iteration; nonlinear problems converge quadratically.
 
-[0,1]
+---
 
-[1,2]
+# 9. Examples
 
-[2,3]
+## Run the linear example:
+```
+python bin/run.py src/wundy/linear_bar.yaml
+```
 
-6.4 Boundary Conditions
+## Run the nonlinear example:
+```
+python bin/run.py src/wundy/nonlinear_bar.yaml
+```
 
-boundary:
+Both will print DOFs and reactions.
 
-node: 0
-value: 0.0
+---
 
-6.5 Nodal Forces
+# 10. Method of Manufactured Solutions (MMS)
 
-cload:
+An MMS test verifies the full solver pipeline.
 
-node: 3
-amplitude: 2.0
+### Choose:
+```
+u(x) = sin(π x)
+Domain: [0,1]
+```
 
-6.6 Materials
+### Derive load:
+```
+ε = du/dx = π cos(πx)
+σ = E ε
+b(x) = -dσ/dx = π² E sin(πx)
+```
 
-material:
+### FE model must reproduce:
+```
+u_exact(x) = sin(π x)
+```
 
-type: ELASTIC
-name: MAT_LINEAR
-parameters:
-E: 10.0
+The MMS test (optional extension) uses distributed loads to reproduce the analytical field.  
+This validates:
 
-6.7 Element Blocks
+- Preprocess  
+- Assembly  
+- Distributed load integration  
+- Stiffness and internal force  
+- Solver correctness  
 
-element block:
+This test is **not required by existing coursework tests** and is implemented separately so it does not affect the required test suite.
 
-name: bar-block
-material: MAT_LINEAR
-elements: all
-element_type: t1d1
+---
 
-6.8 Solver Settings
+# 11. Automated Testing
 
-solver:
-type: nonlinear
-max_iters: 25
-tol_residual: 1e-8
-
-7. Example Problems
-7.1 Linear Bar Example
-
-wundy:
-coords: [0,1,2,3,4]
-connect:
-- [0,1]
-- [1,2]
-- [2,3]
-- [3,4]
-boundary:
-- node: 0
-value: 0.0
-cload:
-- node: 4
-amplitude: 2.0
-material:
-- type: ELASTIC
-name: MAT_LINEAR
-parameters:
-E: 10.0
-element block:
-- name: bar-block
-material: MAT_LINEAR
-elements: all
-element_type: t1d1
-solver:
-type: linear
+### `test_first.py`
+Validates:
+- Linear solver correctness
+- Stiffness matrix matching analytical form
+- DOF and reaction outputs
+- Case-insensitive material/block lookup
 
-Expected solution: u(L) = PL/(EA)
+### `test_elements.py`
+Validates:
+- Element stiffness
+- Internal forces
+- Strain calculations
 
-7.2 Neo-Hookean Nonlinear Bar
+### `test_materials.py`
+Validates:
+- Linear elastic σ and tangent
+- Error handling for invalid materials
 
-wundy:
-coords: [0,1,2,3]
-connect:
-- [0,1]
-- [1,2]
-- [2,3]
-boundary:
-- node: 0
-value: 0.0
-cload:
-- node: 3
-amplitude: 1.0
-material:
-- type: NEO_HOOKE_1D
-name: MAT_NH
-parameters:
-E: 200.0
-element block:
-- name: bar-block
-material: MAT_NH
-elements: all
-element_type: t1d1
-solver:
-type: nonlinear
-max_iters: 25
-tol_residual: 1e-8
+### `test_user_input.py`
+Validates:
+- Schema correctness  
+- Preprocessing correctness  
+- Name normalization  
+- Node/element/block consistency  
 
-7.3 Beam MMS Verification
+All tests must pass:
 
-Manufactured solution: w(x) = x²(1–x)²
-q(x) computed from EI w'''' + q = 0
-Used to verify beam element accuracy.
+```
+pytest
+```
 
-8. Verification and Validation
-8.1 Verification
+Expected:
+```
+8 passed
+```
 
-Linear bar matches analytical
+---
 
-Nonlinear bar converges
+# 12. Extending WUNDY
 
-Beam MMS matches manufactured solution
+Future improvements can include:
 
-8.2 Validation
+- Multiple DOFs per node  
+- Frame/truss elements  
+- Plasticity  
+- Eigenvalue analysis  
+- Dynamic response  
+- Visualization tools  
 
-Neo-Hookean stiffening captured
+---
 
-Linear and nonlinear match at small loads
+# 13. Author
 
-Displacement decreases with larger E
+Developed by **Verl Grant** as a complete modular 1D finite-element solver.
 
-9. Running a Simulation
-
-Command line:
-python -m wundy input.yaml
-or
-python bin/run_wundy.py input.yaml
-
-10. Outputs
-
-Nodal displacements
-
-Reaction forces
-
-Element stress/strain
-
-Load–displacement curves
-
-10.1 Sample Output (Linear Bar Example)
-
-Run the linear bar example:
-
-python -m wundy src/wundy/docs/linear_bar.yaml
-
---- Wundy Solver Output ---
-
-Nodal Displacements:
-u = [0.0000, 0.0500, 0.1000, 0.1500, 0.2000]
-
-Reaction Forces:
-Node 0: -2.0000
-
-Element Stresses:
-Element 0: 2.0
-Element 1: 2.0
-Element 2: 2.0
-Element 3: 2.0
-
-Solver Status: Converged
-
-11. Summary
-
-Wundy provides:
-
-
-1D FEM (bars and beams)
-
-Linear & Neo-Hookean materials
-
-Newton–Raphson nonlinear solving
-
-YAML-based input
-
-Verified examples and MMS tests
-This manual describes everything needed to run 1D FEM simulations for the final project.

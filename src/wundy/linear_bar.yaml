@@ -1,30 +1,44 @@
 wundy:
-  coords: [0,1,2,3,4]
-  connect:
-    - [0,1]
-    - [1,2]
-    - [2,3]
-    - [3,4]
+  nodes:
+    - [0, 0.0]
+    - [1, 1.0]
+    - [2, 2.0]
+    - [3, 3.0]
+    - [4, 4.0]
 
-  boundary:
-    - node: 0
+  elements:
+    - [0, 0, 1]
+    - [1, 1, 2]
+    - [2, 2, 3]
+    - [3, 3, 4]
+
+  boundary conditions:
+    - name: FIXED
+      type: DIRICHLET
+      nodes: [0]
+      dof: x
       value: 0.0
 
-  cload:
-    - node: 4
-      amplitude: 2.0
+  concentrated loads:
+    - name: TIP_LOAD
+      nodes: [4]
+      dof: x
+      value: 2.0     # smaller load than nonlinear example
 
-  material:
+  distributed loads: []
+
+  materials:
     - type: ELASTIC
-      name: MAT_LINEAR
+      name: MAT_ELASTIC
       parameters:
         E: 10.0
+        nu: 0.3
 
-  element block:
-    - name: bar-block
-      material: MAT_LINEAR
-      elements: all
-      element_type: t1d1
-
-  solver:
-    type: linear
+  element blocks:
+    - name: BLOCK-1
+      material: MAT_ELASTIC
+      elements: [0, 1, 2, 3]
+      element:
+        type: T1D1
+        properties:
+          area: 1.0
