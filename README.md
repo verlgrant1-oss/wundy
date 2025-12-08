@@ -1,209 +1,215 @@
-# WUNDY — 1D Finite Element Framework
-A modular educational FEA code for linear and nonlinear bar elements.
+WUNDY — 1D Finite Element Framework
 
----
+A modular educational FEA code for linear and nonlinear bar elements, developed step-by-step for the course final project.
 
-## Overview
+Overview
 
-WUNDY is a lightweight, modular 1D finite-element framework developed over several structured weekly milestones.  
-The framework supports:
+WUNDY is a lightweight, modular 1D finite-element framework designed to demonstrate:
 
-- Linear elastic bar elements  
-- Nonlinear Neo-Hookean bar elements  
-- Newton–Raphson nonlinear solving  
-- YAML-driven input files  
-- Full preprocess → assembly → solve → postprocess pipeline  
-- Complete automated testing (pytest)
+Linear elastic bar elements
 
-All components integrate into a general-purpose solver that loads a YAML model, preprocesses it, and solves either a linear or nonlinear FE system depending on the material definitions.
+Nonlinear Neo-Hookean bar response
 
----
+Newton–Raphson nonlinear solving
 
-## Repository Structure
-```
+YAML-driven input files
+
+Full preprocess → assembly → solve pipeline
+
+Automated verification using pytest
+
+Method of Manufactured Solutions (MMS) accuracy test
+
+All models are defined in YAML, validated by the input schema, converted to FE arrays, assembled into global stiffness and force vectors, and solved by the linear or nonlinear solver.
+
+Repository Structure
+
 wundy/
-│
 ├── bin/
-│   └── run.py
+│ └── run.py
 │
 ├── src/wundy/
-│   ├── first.py
-│   ├── elements.py
-│   ├── materials.py
-│   ├── ui.py
-│   ├── solvers.py
-│   ├── nonlinear_bar.yaml
-│   └── linear_bar.yaml
+│ ├── first.py
+│ ├── elements.py
+│ ├── materials.py
+│ ├── ui.py
+│ ├── solver.py
+│ ├── linear_bar.yaml
+│ ├── nonlinear_bar.yaml
+│ └── examples/
+│ ├── mms_input.yaml
+│ └── run_mms.py
 │
 ├── tests/
-│   ├── first.py
-│   ├── test_elements.py
-│   ├── test_materials.py
-│   ├── user_input.py
+│ ├── first.py
+│ ├── test_elements.py
+│ ├── test_materials.py
+│ ├── test_user_input.py
+│ └── test_mms.py
 │
 └── README.md
-```
 
----
+Features Implemented
+1. YAML Input System
 
-## Features Implemented
+Each FE model is defined by a single YAML file including:
 
-### 1. YAML Input System
-Every simulation is controlled by a single YAML file with sections:
+nodes
 
-- nodes  
-- elements  
-- boundary conditions  
-- materials  
-- element blocks  
-- concentrated & distributed loads  
+elements
 
-The schema is validated and converted into internal FE arrays using `ui.preprocess`.
+node sets / element sets
 
----
+boundary conditions
 
-### 2. Element Library
+materials
+
+element blocks
+
+concentrated loads
+
+distributed loads
+
+The ui.preprocess() function converts YAML into solver-ready arrays.
+
+2. Element Library (T1D1)
 
 Implemented element:
-- **T1D1** — 2-node 1D bar element
+
+T1D1 — 2-node, 1D bar element
 
 Capabilities:
-- Strain extraction  
-- Linear stiffness  
-- Nonlinear tangent stiffness  
-- Internal force vector  
 
----
+strain computation
 
-### 3. Material Models
+linear stiffness matrix
 
-#### Elastic
-σ = E * ε
+nonlinear tangent stiffness
 
-#### Neo-Hookean (1D)
-Used for the nonlinear example.  
-Provides stress and tangent modulus for Newton iterations.
+internal force vector
 
----
+equivalent nodal force load generation
 
-### 4. Assembly System
-WUNDY performs:
+3. Material Models
 
-- Global stiffness matrix assembly  
-- Global internal force assembly  
-- External force vector assembly  
-- Automatic DOF mapping  
+Linear Elastic:
+σ = E ε
 
-DOFs follow:
+Neo-Hookean (1D demonstration):
+Used to test nonlinear Newton iterations.
 
-```
-global = node_index * dof_per_node + local_dof
-```
+4. Assembly System
 
----
+The solver assembles:
 
-### 5. Nonlinear Newton Solver
+global stiffness
 
-The `solvers.py` module performs:
+global internal force
 
-```
-loop:
-    build tangent stiffness
-    compute internal force
-    residual = Fext - Rint
-    solve Δu
-    update u
-    check convergence
-```
+global external load vector
 
-Works for any 1D nonlinear material.
+DOF numbering rule:
+global_dof = node_index * dof_per_node + local_dof
 
----
+(Only one DOF per node in this project.)
 
-## Running Examples
+5. Nonlinear Newton Solver
 
-### Linear Bar
-```bash
+Algorithm:
+
+u = 0
+repeat:
+• assemble tangent stiffness
+• compute internal force
+• compute residual
+• solve for Δu
+• update u
+until converged
+
+Automatically used whenever a nonlinear material is defined.
+
+Running Examples
+Linear Bar
+
 python bin/run.py src/wundy/linear_bar.yaml
-```
 
-### Nonlinear Bar
-```bash
+Nonlinear Bar
+
 python bin/run.py src/wundy/nonlinear_bar.yaml
-```
 
----
+Method of Manufactured Solutions (MMS)
 
-## Tests
+WUNDY includes a full MMS verification using the exact solution:
+
+u_exact(x) = sin(pi x)
+
+The forcing is pre-generated in:
+
+src/wundy/examples/mms_input.yaml
+
+To run MMS:
+
+python -m wundy.examples.run_mms
+
+The output includes:
+
+FE displacement
+
+exact displacement
+
+nodal error
+
+max error
+
+L2 error
+
+This verifies correctness of assembly and solution.
+
+Tests
 
 Run all tests:
 
-```bash
 pytest
-```
 
-Expected:
+Expected result:
 
-```
-8 passed in 0.16s
-```
+9 passed
 
 Tests cover:
 
-- materials  
-- elements  
-- preprocess  
-- first-order FE solver  
-- case-insensitive name lookups  
+materials
 
----
+elements
 
-## Development Timeline
+preprocess
 
-### Week 1
-- Basic linear FE solver (`first.py`)
+user input
 
-### Week 2
-- Modular elements, materials, preprocess
+linear solver
 
-### Week 3
-- Neo-Hookean model and Newton solver
+distributed loads
 
-### Final Project
-- Full YAML-driven solver  
-- Linear + nonlinear integration  
-- Example models  
-- All tests pass  
+MMS accuracy
 
----
+Development Timeline
 
-## Requirements
-```
+Week 1: Basic linear solver (first.py)
+Week 2: Elements, materials, preprocessing
+Week 3: Neo-Hookean material + Newton solver
+Final: MMS, nonlinear bar, full test suite
+
+Requirements
+
 numpy
 pyyaml
 schema
 pytest
-```
 
-Install:
+Install packages:
 
-```bash
 pip install -r requirements.txt
-```
 
----
+Notes
 
-## Future Extensions
-
-- Multiple DOFs per node  
-- Truss & frame elements  
-- Plasticity  
-- Eigenvalue analysis  
-- Visualization  
-
----
-
-## Notes
-
-This project was developed by Verl Grant as a complete instructional FE code base.  
-All components are functional and verified by the automated test suite.
+Developed by Verl Grant as a complete instructional 1D finite-element codebase.
+All components are fully functional and validated through automated tests and MMS verification.
